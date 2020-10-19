@@ -124,6 +124,7 @@ Process {
             if ($userParameters.$p) {
                 $value = $userParameters.$p
             }
+            $value = $ExecutionContext.InvokeCommand.ExpandString($value)
             Write-Verbose "Parameter name '$p' value '$value'"
             $invokeCommandArgumentList += , $value
         }
