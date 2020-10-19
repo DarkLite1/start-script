@@ -88,9 +88,14 @@ Begin {
 Process {
     Try {
         #region Test valid .json file
-        $userParameters = $ParameterPathItem | Get-Content -Raw | 
-        ConvertFrom-Json
-        Write-Verbose "User parameters '$userParameters'"
+        try {
+            $userParameters = $ParameterPathItem | Get-Content -Raw | 
+            ConvertFrom-Json
+            Write-Verbose "User parameters '$userParameters'"    
+        }
+        catch {
+            throw "Invalid parameter file: $_"
+        }
         #endregion
 
         #region Copy parameter file to log folder
@@ -143,11 +148,60 @@ Process {
     Catch {
         Write-Warning $_
 
-        $errorMessage = "Invalid parameter file '$($ParameterPathItem.FullName)`r`n'`r`ERROR: $_`r`n`r`nScript parameters:`r`n$($scriptParameters -join `"`r`n`")" 
+        $errorFileMessage = "$($userParameters.ScriptName)
 
-        $errorMessage | Out-File  "$LogFile - $($userParameters.ScriptName) - $($ParameterPathItem.Name) - ERROR.txt" -Encoding utf8 -Force -EA Ignore
 
-        Send-MailHC -To $ScriptAdmin -Subject FAILURE -Priority High -Message $errorMessage -Header $ScriptName
+Error message
+-----------------------------
+ERROR: $_
+
+
+
+Script parameters
+-----------------------------
+ORDER    NAME           VALUE
+$(
+    $list = for ($i = 0; $i -lt $scriptParameters.Count; $i++) {
+        "{0}{1}{2}{3}{4}'{5}'" -f $(' ' *2), 
+        $i, 
+        $(' ' *6),
+        $scriptParameters[$i], 
+        $(
+            $spaces =  15 - ($scriptParameters[$i] | Measure-Object -Character).Characters
+            if($spaces -le 0) { $(' '*3) } else {' ' * $spaces}
+        ),
+        $(if ($invokeCommandArgumentList -and 
+        ($invokeCommandArgumentList.Count -ge $i)
+        ) {$invokeCommandArgumentList[$i]})
+    }
+    $($List -join `"`r`n`")    
+)
+
+
+Start script arguments
+----------------------
+- ScriptPath`t:`t$ScriptPath
+- ParameterPath`t:`t$ParameterPath
+"
+            
+        $logFileFullName = "$LogFile - $($userParameters.ScriptName) - $($ParameterPathItem.Name) - ERROR.txt"
+            
+        $errorFileMessage | Out-File $logFileFullName -Encoding utf8 -Force -EA Ignore
+            
+        $mailParams = @{
+            To          = $ScriptAdmin 
+            Subject     = "FAILURE{0}" -f $(
+                if ($userParameters.ScriptName) { 
+                    ' - ' + $userParameters.ScriptName 
+                })
+            Priority    = 'High' 
+            Message     = "Script '<b>$($userParameters.ScriptName)</b>' failed with error:
+                <p>$_</p>
+                <p><i>* Check the attachment for details</i></p>"
+            Header      = $ScriptName 
+            Attachments = $logFileFullName
+        }
+        Send-MailHC @mailParams
 
         Write-EventLog @EventErrorParams -Message "FAILURE:`n`n- $errorMessage"
         Exit 1

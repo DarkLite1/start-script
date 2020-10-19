@@ -138,7 +138,7 @@ Describe 'a valid parameter input file' {
             ($ArgumentList[0] -eq 'MyCustomPrinter') -and
             ($ArgumentList[1] -eq 'red') -and
             ($ArgumentList[2] -eq 'Get printers') -and
-            ($ArgumentList[3] -eq $null) -and
+            ($ArgumentList[3] -eq '') -and
             ($ArgumentList[4] -eq 'A4') # default parameter in the script is copied
         }
     }
@@ -258,7 +258,9 @@ Describe 'when the parameter file is not valid because' {
         }
         It 'an email is sent to the admin' {
             Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {
-                (&$MailAdminParams) -and 
+                ($To -eq $ScriptAdmin) -and 
+                ($Priority -eq 'High') -and 
+                ($Subject -eq 'FAILURE - Get printers') -and
                 ($Message -like "*parameter 'UnknownParameter' is not accepted by script*")
             }
         }
@@ -311,7 +313,9 @@ Describe 'when the parameter file is not valid because' {
         }
         It 'an email is sent to the admin' {
             Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {
-                (&$MailAdminParams) -and 
+                ($To -eq $ScriptAdmin) -and 
+                ($Priority -eq 'High') -and 
+                ($Subject -eq 'FAILURE - Get printers') -and
                 ($Message -like "*Input string was not in a correct format*")
             }
         }
@@ -333,5 +337,5 @@ Describe 'when the parameter file is not valid because' {
                 $testLogFile[1].Name | Should -BeLike '*- Get printers - inputFile.json - ERROR.txt'
             }
         }
-    } -Tag test
+    }
 }
