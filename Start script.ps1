@@ -148,6 +148,7 @@ Process {
     Catch {
         Write-Warning $_
 
+        #region Create error file
         $errorFileMessage = "$($userParameters.ScriptName)
 
 
@@ -187,6 +188,7 @@ Start script arguments
         $logFileFullName = "$LogFile - $($userParameters.ScriptName) - $($ParameterPathItem.Name) - ERROR.txt"
             
         $errorFileMessage | Out-File $logFileFullName -Encoding utf8 -Force -EA Ignore
+        #endregion
             
         $mailParams = @{
             To          = $ScriptAdmin 
