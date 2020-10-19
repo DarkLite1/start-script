@@ -157,6 +157,54 @@ Describe 'a valid parameter input file' {
     }
 }
 
+Describe 'when Invoke-Command fails' {
+    Context 'because the script in ScriptPath throws an error' {
+        BeforeAll {
+            Mock Invoke-Command {
+                & $startInvokeCommand -Scriptblock { 
+                    Param (
+                        [parameter(Mandatory)]
+                        [String]$Fruit
+                    )
+                    if ($Fruit -ne 'kiwi') {
+                        throw 'This is not a kiwi'
+                    }
+                } -ArgumentList 'banana'
+            }
+            . $testScript @Params
+        }
+        It 'Invoke-Command is called' {
+            Should -Invoke Invoke-Command -Scope Context
+        }
+        It 'an email is sent to the admin' {
+            Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {
+                ($To -eq $ScriptAdmin) -and 
+                ($Priority -eq 'High') -and 
+                ($Subject -eq 'FAILURE - Get printers') -and
+                ($Message -like "*this is not a kiwi*")
+            }
+        }
+        Context 'logging' {
+            BeforeAll {
+                $testLogFolder = "$($Params.LogFolder)\Start script"
+                $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
+            }
+            It 'the log folder is created' {            
+                $testLogFolder | Should -Exist
+            }
+            It 'two files are created in the log folder' {
+                $testLogFile.Count | Should -BeExactly 2
+            }
+            It 'one file is a copy of the input file' {
+                $testLogFile[0].Name | Should -BeLike '*- Get printers - inputFile.json'
+            }
+            It 'the other file contains the error message' {
+                $testLogFile[1].Name | Should -BeLike '*- Get printers - inputFile.json - ERROR.txt'
+            }
+        }
+    }
+}
+
 Describe 'when the parameter file is not valid because' {
     Context 'it is missing the property ScriptName' {
         BeforeAll {
@@ -245,7 +293,7 @@ Describe 'when the parameter file is not valid because' {
                 PrinterColor     = 'red'
                 PrinterName      = "MyCustomPrinter"
                 ScriptName       = 'Get printers'
-                UnknownParameter = 'kiwiw'
+                UnknownParameter = 'kiwi'
             } | ConvertTo-Json | Out-File $testInputFile -Encoding utf8
 
             $clonedParams = $Params.Clone()
@@ -262,61 +310,6 @@ Describe 'when the parameter file is not valid because' {
                 ($Priority -eq 'High') -and 
                 ($Subject -eq 'FAILURE - Get printers') -and
                 ($Message -like "*parameter 'UnknownParameter' is not accepted by script*")
-            }
-        }
-        Context 'logging' {
-            BeforeAll {
-                $testLogFolder = "$($Params.LogFolder)\Start script"
-                $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
-            }
-            It 'the log folder is created' {            
-                $testLogFolder | Should -Exist
-            }
-            It 'two files are created in the log folder' {
-                $testLogFile.Count | Should -BeExactly 2
-            }
-            It 'one file is a copy of the input file' {
-                $testLogFile[0].Name | Should -BeLike '*- Get printers - inputFile.json'
-            }
-            It 'the other file contains the error message' {
-                $testLogFile[1].Name | Should -BeLike '*- Get printers - inputFile.json - ERROR.txt'
-            }
-        }
-    }
-    Context 'when Invoke-Command fails because of an incorrect parameter in the input file' {
-        BeforeAll {
-            $testInputFile = (New-Item -Path "TestDrive:\InputFile.json" -Force -ItemType File -EA Ignore).FullName
-     
-            @{  
-                PrinterColor = 'red'
-                PrinterName  = "MyCustomPrinter"
-                ScriptName   = 'Get printers'
-            } | ConvertTo-Json | Out-File $testParameterPath -Encoding utf8
-    
-            $clonedParams = $Params.Clone()
-            $clonedParams.ParameterPath = $testInputFile
-
-            . $testScript @clonedParams
-
-            Mock Invoke-Command {
-                & $startInvokeCommand -Scriptblock { 
-                    Param (
-                        [parameter(Mandatory)]
-                        [int]$validParameter
-                    )
-                } -ArgumentList 'string'
-            }
-            . $testScript @Params
-        }
-        It 'Invoke-Command is called' {
-            Should -Invoke Invoke-Command -Scope Context
-        }
-        It 'an email is sent to the admin' {
-            Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {
-                ($To -eq $ScriptAdmin) -and 
-                ($Priority -eq 'High') -and 
-                ($Subject -eq 'FAILURE - Get printers') -and
-                ($Message -like "*Input string was not in a correct format*")
             }
         }
         Context 'logging' {

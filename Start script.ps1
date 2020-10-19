@@ -103,7 +103,7 @@ Process {
         Copy-Item -Path $ParameterPathItem.FullName -Destination "$LogFile - $($userParameters.ScriptName) - $($ParameterPathItem.Name)"
         #endregion
     
-        #region Test only known script parameters are used
+        #region Test only valid script parameters are used
         $userParameters.PSObject.Properties.Name | Where-Object {
             $scriptParameters -notContains $_
         } | ForEach-Object {
