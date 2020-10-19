@@ -190,6 +190,7 @@ Start script arguments
         $errorFileMessage | Out-File $logFileFullName -Encoding utf8 -Force -EA Ignore
         #endregion
             
+        #region Send mail
         $mailParams = @{
             To          = $ScriptAdmin 
             Subject     = "FAILURE{0}" -f $(
@@ -204,8 +205,9 @@ Start script arguments
             Attachments = $logFileFullName
         }
         Send-MailHC @mailParams
+        #endregion
 
-        Write-EventLog @EventErrorParams -Message "FAILURE:`n`n- $errorMessage"
+        Write-EventLog @EventErrorParams -Message "FAILURE:`n`n- $errorFileMessage"
         Exit 1
     }
     Finally {
