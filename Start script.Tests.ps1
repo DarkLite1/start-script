@@ -2,7 +2,7 @@
 
 BeforeAll {
     $testScript = $PSCommandPath.Replace('.Tests.ps1', '.ps1')
-    $startInvokeCommand = Get-Command Invoke-Command
+    $StartJobCommand = Get-Command Start-Job
 
     $MailAdminParams = {
         ($To -eq $ScriptAdmin) -and 
@@ -38,7 +38,9 @@ BeforeAll {
         LogFolder     = (New-Item -Path "TestDrive:\Log" -ItemType Directory -EA Ignore).FullName
     }    
 
-    Mock Invoke-Command
+    Mock Start-Job -MockWith {
+        & $StartJobCommand -Scriptblock { 1 } -Name 'Get printers (BNL)'
+    }
     Mock Send-MailHC
     Mock Write-EventLog
 }
@@ -130,11 +132,10 @@ Describe 'a valid parameter input file' {
     It 'should have the parameters ScriptName in the .json parameter file' {
         $userParameters.ScriptName | Should -Not -BeNullOrEmpty
     }
-    It 'should invoke Invoke-Command with the parameters in the correct order' {
-        Should -invoke Invoke-Command -Exactly 1 -Scope Describe -ParameterFilter {
-            ($ErrorAction -eq 'Stop') -and
-            ($FilePath -eq $testScriptPath) -and
-            ($ComputerName -eq $env:COMPUTERNAME) -and
+    It 'should invoke Start-Job with the parameters in the correct order' {
+        Should -invoke Start-Job -Exactly 1 -Scope Describe -ParameterFilter {
+            ($Name -eq 'Get printers') -and
+            ($LiteralPath -eq $testScriptPath) -and
             ($ArgumentList[0] -eq 'MyCustomPrinter') -and
             ($ArgumentList[1] -eq 'red') -and
             ($ArgumentList[2] -eq 'Get printers') -and
@@ -157,31 +158,31 @@ Describe 'a valid parameter input file' {
     }
 }
 
-Describe 'when Invoke-Command fails' {
-    Context 'because the script in ScriptPath throws an error' {
+Describe 'when Start-Job fails' {
+    Context 'because of a missing mandatory parameter' {
         BeforeAll {
-            Mock Invoke-Command {
-                & $startInvokeCommand -Scriptblock { 
+            Mock Start-Job {
+                & $StartJobCommand -Scriptblock { 
                     Param (
                         [parameter(Mandatory)]
-                        [String]$Fruit
+                        [int]$Number,
+                        [parameter(Mandatory)]
+                        [String]$Name
                     )
-                    if ($Fruit -ne 'kiwi') {
-                        throw 'This is not a kiwi'
-                    }
-                } -ArgumentList 'banana'
+                    # parameters name is missing
+                } -ArgumentList 1
             }
-            . $testScript @Params
+            . $testScript @Params -EA SilentlyContinue
         }
-        It 'Invoke-Command is called' {
-            Should -Invoke Invoke-Command -Scope Context
+        It 'Start-Job is called' {
+            Should -Invoke Start-Job -Scope Context
         }
         It 'an email is sent to the admin' {
             Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {
                 ($To -eq $ScriptAdmin) -and 
                 ($Priority -eq 'High') -and 
                 ($Subject -eq 'FAILURE - Get printers') -and
-                ($Message -like "*this is not a kiwi*")
+                ($Message -like "*Job status 'Blocked', have you provided all mandatory parameters?*")
             }
         }
         Context 'logging' {
@@ -201,7 +202,93 @@ Describe 'when Invoke-Command fails' {
             It 'the other file contains the error message' {
                 $testLogFile[0].Name | Should -BeLike '*- Get printers - inputFile - ERROR.json'
                 $actual = $testLogFile[0] | Get-Content -Raw | ConvertFrom-Json
-                $actual.errorMessage | Should -BeLike "*This is not a kiwi*"
+                $actual.errorMessage | Should -BeLike "*Job status 'Blocked', have you provided all mandatory parameters?*"
+            }
+        }
+    }
+    Context 'because of parameter validation issues' {
+        BeforeAll {
+            Mock Start-Job {
+                & $StartJobCommand -Scriptblock { 
+                    Param (
+                        [parameter(Mandatory)]
+                        [int]$IncorrectParameters
+                    )
+                    # parameters not matching
+                } -ArgumentList 'string'
+            }
+            . $testScript @Params
+        }
+        It 'Start-Job is called' {
+            Should -Invoke Start-Job -Scope Context
+        }
+        It 'an email is sent to the admin' {
+            Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {
+                ($To -eq $ScriptAdmin) -and 
+                ($Priority -eq 'High') -and 
+                ($Subject -eq 'FAILURE - Get printers') -and
+                ($Message -like "*Cannot process argument transformation on parameter 'IncorrectParameters'*")
+            }
+        }
+        Context 'logging' {
+            BeforeAll {
+                $testLogFolder = "$($Params.LogFolder)\Start script"
+                $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
+            }
+            It 'the log folder is created' {            
+                $testLogFolder | Should -Exist
+            }
+            It 'two files are created in the log folder' {
+                $testLogFile.Count | Should -BeExactly 2
+            }
+            It 'one file is a copy of the input file' {
+                $testLogFile[1].Name | Should -BeLike '*- Get printers - inputFile.json'
+            }
+            It 'the other file contains the error message' {
+                $testLogFile[0].Name | Should -BeLike '*- Get printers - inputFile - ERROR.json'
+                $actual = $testLogFile[0] | Get-Content -Raw | ConvertFrom-Json
+                $actual.errorMessage | Should -BeLike "*Cannot process argument transformation on parameter 'IncorrectParameters'*"
+            }
+        }
+    }
+    Context 'because of errors in the execution script' {
+        BeforeAll {
+            Mock Start-Job {
+                & $StartJobCommand -Scriptblock { 
+                    throw 'Failure in script'
+                }
+            }
+            . $testScript @Params
+        }
+        It 'Start-Job is called' {
+            Should -Invoke Start-Job -Scope Context
+        }
+        It 'an email is sent to the admin' {
+            Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {
+                ($To -eq $ScriptAdmin) -and 
+                ($Priority -eq 'High') -and 
+                ($Subject -eq 'FAILURE - Get printers') -and
+                ($Message -like "*Failure in script*")
+            }
+        }
+        Context 'logging' {
+            BeforeAll {
+                $testLogFolder = "$($Params.LogFolder)\Start script"
+                $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
+            }
+            It 'the log folder is created' {            
+                $testLogFolder | Should -Exist
+            }
+            It 'two files are created in the log folder' {
+                $testLogFile.Count | Should -BeExactly 2
+            }
+            It 'one file is a copy of the input file' {
+                $testLogFile[1].Name | Should -BeLike '*- Get printers - inputFile.json'
+            }
+            It 'the other file contains the error message' {
+                $testLogFile[0].Name | Should -BeLike '*- Get printers - inputFile - ERROR.json'
+                $actual = $testLogFile[0] | Get-Content -Raw | ConvertFrom-Json
+                $actual.errorMessage | Should -BeLike "*Failure in script*"
             }
         }
     }
@@ -223,8 +310,8 @@ Describe 'when the parameter file is not valid because' {
 
             . $testScript @clonedParams
         }
-        It 'Invoke-Command is not called' {
-            Should -Not -Invoke Invoke-Command -Scope Context
+        It 'Start-Job is not called' {
+            Should -Not -Invoke Start-Job -Scope Context
         }
         It 'an email is sent to the admin' {
             Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {
@@ -264,8 +351,8 @@ Describe 'when the parameter file is not valid because' {
 
             . $testScript @clonedParams
         }
-        It 'Invoke-Command is not called' {
-            Should -Not -Invoke Invoke-Command -Scope Context
+        It 'Start-Job is not called' {
+            Should -Not -Invoke Start-Job -Scope Context
         }
         It 'an email is sent to the admin' {
             Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {
@@ -307,8 +394,8 @@ Describe 'when the parameter file is not valid because' {
 
             . $testScript @clonedParams
         }
-        It 'Invoke-Command is not called' {
-            Should -Not -Invoke Invoke-Command -Scope Context
+        It 'Start-Job is not called' {
+            Should -Not -Invoke Start-Job -Scope Context
         }
         It 'an email is sent to the admin' {
             Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {

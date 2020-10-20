@@ -5,7 +5,14 @@
     .DESCRIPTION
         This script is designed to be triggered by a scheduled task. It will
         execute a single script with a single .json input file containing its
-        named parameters.
+        named parameters. 
+        
+        The parameter ScriptName is mandatory in the parameter file. 
+        
+        A copy of the parameter file is always saved in the log folder.
+
+        Whenever the child script fails an error file and mail is generated
+        to inform the admin and for historical reasons saved in the log folder.
 
     .PARAMETER ScriptPath
         Path to the script that needs to be executed.
@@ -83,6 +90,13 @@ Begin {
 
         $scriptParametersList = $($scriptParameters.Key)
         #endregion
+
+        #region Load modules for child script
+        $LoadModules = {
+            Get-ChildItem ($env:PSModulePath -split ';') -EA Ignore |
+            Where-Object Name -Like 'Toolbox*' | Import-Module
+        }
+        #endregion
     }
     Catch {
         Write-Warning $_
@@ -94,6 +108,8 @@ Begin {
 
 Process {
     Try {
+        $job = $null
+
         #region Test valid .json file
         try {
             $userParameters = $ParameterPathItem | Get-Content -Raw | 
@@ -126,7 +142,7 @@ Process {
         #endregion
     
         #region Build argument list for Invoke-Command
-        $invokeCommandArgumentList = @()
+        $startJobArgumentList = @()
         
         foreach ($p in $scriptParametersList) {
             $value = $null
@@ -138,18 +154,43 @@ Process {
             }
             $value = $ExecutionContext.InvokeCommand.ExpandString($value)
             Write-Verbose "Parameter name '$p' value '$value'"
-            $invokeCommandArgumentList += , $value
+            $startJobArgumentList += , $value
         }
         #endregion
         
-        #region Start script with arguments in the correct order
-        $invokeCommandParams = @{
-            ErrorAction  = 'Stop'
-            FilePath     = $scriptPathItem.FullName
-            ComputerName = $env:COMPUTERNAME
-            ArgumentList = $invokeCommandArgumentList 
+        #region Start job
+        Write-Verbose 'Start job'
+
+        Write-EventLog @EventOutParams -Message (
+            "Launch script:`n" +
+            "`n- Name:`t`t" + $userParameters.ScriptName + 
+            "`n- Script:`t`t" + $scriptPathItem.FullName + 
+            "`n- ArgumentList:`t" + $startJobArgumentList)
+        $StartJobParams = @{
+            Name                 = $userParameters.ScriptName
+            InitializationScript = $LoadModules
+            LiteralPath          = $scriptPathItem.FullName
+            ArgumentList         = $startJobArgumentList
         }
-        Invoke-Command @invokeCommandParams
+        $job = Start-Job @StartJobParams
+        #endregion
+
+        #region Wait for job launch
+        Write-Verbose 'Wait 5 seconds for initial job launch'
+        Start-Sleep -Seconds 5
+        
+        Write-Verbose "Job '$($job.Name)' status '$($job.State)'"
+        #endregion
+
+        #region Missing mandatory parameters set the state to 'Blocked'
+        if ($job.State -eq 'Blocked') {
+            throw "Job status 'Blocked', have you provided all mandatory parameters?"
+        }
+        #endregion
+
+        #region Wait for job to finish
+        Write-Verbose 'Wait for job to finish'
+        $job | Wait-Job | Receive-Job -EA Stop
         #endregion
     }
     Catch {
@@ -157,12 +198,12 @@ Process {
 
         #region Create error file
         $errorFileMessage = [ordered]@{
-            errorMessage              = $_.Exception.Message
-            scriptName                = $userParameters.ScriptName
-            scriptParameters          = $userInfoList
-            invokeCommandArgumentList = $invokeCommandArgumentList
-            ScriptFile                = $ScriptPath
-            ParameterFile             = $ParameterPath
+            errorMessage         = $_.Exception.Message
+            scriptName           = $userParameters.ScriptName
+            scriptParameters     = $userInfoList
+            startJobArgumentList = $startJobArgumentList
+            ScriptFile           = $ScriptPath
+            ParameterFile        = $ParameterPath
         } | ConvertTo-Json -Depth 5 | Format-JsonHC
 
         $logFileFullName = "$LogFile - $($userParameters.ScriptName) - $($ParameterPathItem.BaseName) - ERROR.json"
@@ -191,6 +232,7 @@ Process {
         Exit 1
     }
     Finally {
+        Get-Job | Remove-Job -Force
         Write-EventLog @EventEndParams
     }
 }
