@@ -73,8 +73,15 @@ Begin {
         $psBuildInParameters = [System.Management.Automation.PSCmdlet]::CommonParameters
         $psBuildInParameters += [System.Management.Automation.PSCmdlet]::OptionalCommonParameters
         
-        $scriptParameters = $(
-            ((Get-Command $scriptPathItem.FullName).Parameters.GetEnumerator() | Where-Object { $psBuildInParameters -notContains $_.Key }).Key)
+        $scriptParameters = (Get-Command $scriptPathItem.FullName).Parameters.GetEnumerator() | 
+        Where-Object { $psBuildInParameters -notContains $_.Key }
+        
+        $userInfoList = foreach ($p in $scriptParameters.GetEnumerator()) {
+            'Name: {0} Type: {1} Mandatory: {2} ' -f 
+            $p.Value.Name, $p.Value.ParameterType, $p.Value.Attributes.Mandatory
+        }
+
+        $scriptParametersList = $($scriptParameters.Key)
         #endregion
     }
     Catch {
@@ -105,7 +112,7 @@ Process {
     
         #region Test only valid script parameters are used
         $userParameters.PSObject.Properties.Name | Where-Object {
-            $scriptParameters -notContains $_
+            $scriptParametersList -notContains $_
         } | ForEach-Object {
             $invalidParameter = $_
             throw "The parameter '$invalidParameter' is not accepted by script '$($scriptPathItem.FullName)'."
@@ -121,7 +128,7 @@ Process {
         #region Build argument list for Invoke-Command
         $invokeCommandArgumentList = @()
         
-        foreach ($p in $scriptParameters) {
+        foreach ($p in $scriptParametersList) {
             $value = $null
             if ($defaultValues[$p]) {
                 $value = $defaultValues[$p]
@@ -149,47 +156,20 @@ Process {
         Write-Warning $_
 
         #region Create error file
-        $errorFileMessage = "$($userParameters.ScriptName)
+        $errorFileMessage = [ordered]@{
+            errorMessage              = $_.Exception.Message
+            scriptName                = $userParameters.ScriptName
+            scriptParameters          = $userInfoList
+            invokeCommandArgumentList = $invokeCommandArgumentList
+            ScriptFile                = $ScriptPath
+            ParameterFile             = $ParameterPath
+        } | ConvertTo-Json -Depth 5 | Format-JsonHC
 
-
-Error message
------------------------------
-ERROR: $_
-
-
-
-Script parameters
------------------------------
-ORDER    NAME           VALUE
-$(
-    $list = for ($i = 0; $i -lt $scriptParameters.Count; $i++) {
-        "{0}{1}{2}{3}{4}'{5}'" -f $(' ' *2), 
-        $i, 
-        $(' ' *6),
-        $scriptParameters[$i], 
-        $(
-            $spaces =  15 - ($scriptParameters[$i] | Measure-Object -Character).Characters
-            if($spaces -le 0) { $(' '*3) } else {' ' * $spaces}
-        ),
-        $(if ($invokeCommandArgumentList -and 
-        ($invokeCommandArgumentList.Count -ge $i)
-        ) {$invokeCommandArgumentList[$i]})
-    }
-    $($List -join `"`r`n`")    
-)
-
-
-Start script arguments
-----------------------
-- ScriptPath`t:`t$ScriptPath
-- ParameterPath`t:`t$ParameterPath
-"
-            
-        $logFileFullName = "$LogFile - $($userParameters.ScriptName) - $($ParameterPathItem.Name) - ERROR.txt"
-            
+        $logFileFullName = "$LogFile - $($userParameters.ScriptName) - $($ParameterPathItem.BaseName) - ERROR.json"
+                    
         $errorFileMessage | Out-File $logFileFullName -Encoding utf8 -Force -EA Ignore
         #endregion
-            
+
         #region Send mail
         $mailParams = @{
             To          = $ScriptAdmin 

@@ -196,10 +196,12 @@ Describe 'when Invoke-Command fails' {
                 $testLogFile.Count | Should -BeExactly 2
             }
             It 'one file is a copy of the input file' {
-                $testLogFile[0].Name | Should -BeLike '*- Get printers - inputFile.json'
+                $testLogFile[1].Name | Should -BeLike '*- Get printers - inputFile.json'
             }
             It 'the other file contains the error message' {
-                $testLogFile[1].Name | Should -BeLike '*- Get printers - inputFile.json - ERROR.txt'
+                $testLogFile[0].Name | Should -BeLike '*- Get printers - inputFile - ERROR.json'
+                $actual = $testLogFile[0] | Get-Content -Raw | ConvertFrom-Json
+                $actual.errorMessage | Should -BeLike "*This is not a kiwi*"
             }
         }
     }
@@ -242,10 +244,12 @@ Describe 'when the parameter file is not valid because' {
                 $testLogFile.Count | Should -BeExactly 2
             }
             It 'one file is a copy of the input file' {
-                $testLogFile[0].Name | Should -BeLike '*-  - inputFile.json'
+                $testLogFile[1].Name | Should -BeLike '*-  - inputFile.json'
             }
             It 'the other file contains the error message' {
-                $testLogFile[1].Name | Should -BeLike '*-  - inputFile.json - ERROR.txt'
+                $testLogFile[0].Name | Should -BeLike '*-  - inputFile - ERROR.json'
+                $actual = $testLogFile[0] | Get-Content -Raw | ConvertFrom-Json
+                $actual.errorMessage | Should -BeLike "*Parameter 'ScriptName' is mandatory*"
             }
         }
     }
@@ -281,7 +285,9 @@ Describe 'when the parameter file is not valid because' {
                 $testLogFile.Count | Should -BeExactly 1
             }
             It 'the other file contains the error message' {
-                $testLogFile[0].Name | Should -BeLike '*-  - inputFile.json - ERROR.txt'
+                $testLogFile[0].Name | Should -BeLike '*-  - inputFile - ERROR.json'
+                $actual = $testLogFile[0] | Get-Content -Raw | ConvertFrom-Json
+                $actual.errorMessage | Should -BeLike "*Invalid parameter file*"
             }
         }
     }
@@ -324,10 +330,12 @@ Describe 'when the parameter file is not valid because' {
                 $testLogFile.Count | Should -BeExactly 2
             }
             It 'one file is a copy of the input file' {
-                $testLogFile[0].Name | Should -BeLike '*- Get printers - inputFile.json'
+                $testLogFile[1].Name | Should -BeLike '*- Get printers - inputFile.json'
             }
             It 'the other file contains the error message' {
-                $testLogFile[1].Name | Should -BeLike '*- Get printers - inputFile.json - ERROR.txt'
+                $testLogFile[0].Name | Should -BeLike '*- Get printers - inputFile - ERROR.json'
+                $actual = $testLogFile[0] | Get-Content -Raw | ConvertFrom-Json
+                $actual.errorMessage | Should -BeLike "*parameter 'UnknownParameter' is not accepted by script*"
             }
         }
     }
