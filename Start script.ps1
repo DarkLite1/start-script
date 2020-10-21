@@ -1,6 +1,6 @@
 <#
     .SYNOPSIS
-        Execute a single script with parameters coming from a .json file.
+        Execute a script with its parameters coming from a .json file.
 
     .DESCRIPTION
         This script is designed to be triggered by a scheduled task. It will
@@ -11,14 +11,25 @@
         
         A copy of the parameter file is always saved in the log folder.
 
-        Whenever the child script fails an error file and mail is generated
-        to inform the admin and for historical reasons saved in the log folder.
+        Whenever the child script fails due to a throw. a parameter validation
+        error, a missing mandatory parameter, incorrect input, ... an error 
+        file and mail is generated to inform the admin and a copy of the error
+        file and import file are saved in the log folder.
+
+        When the child script fails, this script will exit with exit code 1. 
+        This will set the scheduled task to status to 'failed' and allows it
+        to be restarted when needed.
+
+        Using 'Exit 1' in a child script will not trigger failure to the task
+        scheduler or a failed script at all. Please use 'throw' in your scripts
+        instead.
 
     .PARAMETER ScriptPath
-        Path to the script that needs to be executed.
+        Path to the script file that needs to be executed.
 
     .PARAMETER ParameterPath
-        Path to the .json file that contains the script parameters.
+        Path to the .json file that contains the named script parameters and
+        their values.
  #>
 
 [CmdLetBinding()]
@@ -178,20 +189,33 @@ Process {
         #region Wait for job launch
         Write-Verbose 'Wait 5 seconds for initial job launch'
         Start-Sleep -Seconds 5
-        
-        Write-Verbose "Job '$($job.Name)' status '$($job.State)'"
         #endregion
 
         #region Missing mandatory parameters set the state to 'Blocked'
         if ($job.State -eq 'Blocked') {
+            Write-Verbose "Job '$($job.Name)' status '$($job.State)'"
             throw "Job status 'Blocked', have you provided all mandatory parameters?"
         }
         #endregion
 
         #region Wait for job to finish
         Write-Verbose 'Wait for job to finish'
-        $job | Wait-Job | Receive-Job -EA Stop
+        $null = $job | Wait-Job
         #endregion
+        
+        #region Return job results or fail on error
+        Write-Verbose "Job '$($job.Name)' status '$($job.State)'"
+        $jobResult  = $job | Receive-Job -EA Stop
+
+        if ($jobResult) {
+            $jobResult
+        }
+        else {
+            Write-Verbose 'No job output'
+        }
+        #endregion
+        
+        Write-Verbose 'Script finished successfully'
     }
     Catch {
         Write-Warning $_
@@ -229,7 +253,10 @@ Process {
         #endregion
 
         Write-EventLog @EventErrorParams -Message "FAILURE:`n`n- $errorFileMessage"
+
+        #region Return failure to the task scheduler
         Exit 1
+        #endregion
     }
     Finally {
         Get-Job | Remove-Job -Force
