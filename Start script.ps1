@@ -163,7 +163,9 @@ Process {
             if ($userParameters.$p) {
                 $value = $userParameters.$p
             }
-            $value = $ExecutionContext.InvokeCommand.ExpandString($value)
+            $value = foreach ($v in $value) {
+                $ExecutionContext.InvokeCommand.ExpandString($v)
+            }
             Write-Verbose "Parameter name '$p' value '$value'"
             $startJobArgumentList += , $value
         }
