@@ -1,8 +1,15 @@
 ﻿#Requires -Module Assert, Pester
 
 BeforeAll {
-    $testScript = $PSCommandPath.Replace('.Tests.ps1', '.ps1')
     $StartJobCommand = Get-Command Start-Job
+
+    $testParams = @{
+        ScriptPath    = (New-Item -Path "TestDrive:\script.ps1" -Force -ItemType File).FullName
+        ParameterPath = (New-Item -Path "TestDrive:\inputFile.json" -Force -ItemType File).FullName
+        ScriptName    = 'Test'
+        LogFolder     = New-Item -Path "TestDrive:\Log" -ItemType Directory
+    }
+    $testScript = $PSCommandPath.Replace('.Tests.ps1', '.ps1')
 
     $MailAdminParams = {
         ($To -eq $ScriptAdmin) -and 
@@ -10,7 +17,6 @@ BeforeAll {
         ($Subject -eq 'FAILURE')
     }
     
-    $testScriptPath = (New-Item -Path "TestDrive:\script.ps1" -Force -ItemType File -EA Ignore).FullName
     @"
     Param (
         [Parameter(Mandatory)]
@@ -21,22 +27,13 @@ BeforeAll {
         [String]`$Tasks,
         [String]`$PaperSize = 'A4'
     )
-"@ | Out-File -FilePath $testScriptPath -Encoding utf8 -Force
-
-    $testParameterPath = (New-Item -Path "TestDrive:\inputFile.json" -Force -ItemType File -EA Ignore).FullName
+"@ | Out-File $testParams.ScriptPath -Encoding utf8 -Force
 
     @{  
         PrinterColor = 'red'
         PrinterName  = "MyCustomPrinter"
         ScriptName   = 'Get printers'
-    } | ConvertTo-Json | Out-File $testParameterPath -Encoding utf8
-
-    $Params = @{
-        ScriptPath    = $testScriptPath
-        ParameterPath = $testParameterPath
-        ScriptName    = 'Test'
-        LogFolder     = (New-Item -Path "TestDrive:\Log" -ItemType Directory -EA Ignore).FullName
-    }    
+    } | ConvertTo-Json | Out-File $testParams.ParameterPath -Encoding utf8
 
     Mock Start-Job -MockWith {
         & $StartJobCommand -Scriptblock { 1 } -Name 'Get printers (BNL)'
@@ -47,17 +44,14 @@ BeforeAll {
 
 Describe 'error handling' {    
     Context 'mandatory parameters' {
-        It '<Name>' -TestCases @(
-            @{  Name = 'ScriptPath' }
-            @{  Name = 'ParameterPath' }
-        ) {
-            (Get-Command $testScript).Parameters[$Name].Attributes.Mandatory |
+        It '<_>' -TestCases @('ScriptPath' , 'ParameterPath' ) {
+            (Get-Command $testScript).Parameters[$_].Attributes.Mandatory |
             Should -BeTrue
         }
     }
     Context 'the logFolder' {
         It 'should exist' {
-            $clonedParams = $Params.Clone()
+            $clonedParams = $testParams.Clone()
             $clonedParams.LogFolder = 'NotExistingLogFolder'
             . $testScript @clonedParams
     
@@ -65,12 +59,11 @@ Describe 'error handling' {
                 (&$MailAdminParams) -and 
                 ($Message -like "*Path 'NotExistingLogFolder' not found*")
             }
-            Should -Invoke Write-EventLog -Exactly 1 -ParameterFilter { $EntryType -eq 'Error' }
         }
     }
     Context 'the ScriptPath' {
         It 'should exist' {
-            $clonedParams = $Params.Clone()
+            $clonedParams = $testParams.Clone()
             $clonedParams.ScriptPath = 'NotExisting'
             
             . $testScript @clonedParams
@@ -79,10 +72,9 @@ Describe 'error handling' {
                 (&$MailAdminParams) -and 
                 ($Message -like "*Script file 'NotExisting' not found*")
             }
-            Should -Invoke Write-EventLog -Exactly 1 -ParameterFilter { $EntryType -eq 'Error' }
         }
         It 'should have the extension .ps1' {
-            $clonedParams = $Params.Clone()
+            $clonedParams = $testParams.Clone()
             $clonedParams.ScriptPath = (New-Item -Path "TestDrive:\incorrectScript.txt" -Force -ItemType File -EA Ignore).FullName
             
             . $testScript @clonedParams
@@ -91,12 +83,11 @@ Describe 'error handling' {
                 (&$MailAdminParams) -and 
                 ($Message -like "*Script file '*incorrectScript.txt' needs to have the extension '.ps1'*")
             }
-            Should -Invoke Write-EventLog -Exactly 1 -ParameterFilter { $EntryType -eq 'Error' }
         }
     }
     Context 'the ParameterPath' {
         It 'should exist' {
-            $clonedParams = $Params.Clone()
+            $clonedParams = $testParams.Clone()
             $clonedParams.ParameterPath = 'NotExisting'
             
             . $testScript @clonedParams
@@ -105,10 +96,9 @@ Describe 'error handling' {
                 (&$MailAdminParams) -and 
                 ($Message -like "*Parameter file 'NotExisting' not found*")
             }
-            Should -Invoke Write-EventLog -Exactly 1 -ParameterFilter { $EntryType -eq 'Error' }
         }
         It 'should have the extension .json' {
-            $clonedParams = $Params.Clone()
+            $clonedParams = $testParams.Clone()
             $clonedParams.ParameterPath = (New-Item -Path "TestDrive:\incorrectParameter.txt" -Force -ItemType File -EA Ignore).FullName
             
             . $testScript @clonedParams
@@ -117,14 +107,13 @@ Describe 'error handling' {
                 (&$MailAdminParams) -and 
                 ($Message -like "*Parameter file '*incorrectParameter.txt' needs to have the extension '.json'*")
             }
-            Should -Invoke Write-EventLog -Exactly 1 -ParameterFilter { $EntryType -eq 'Error' }
         }
     }
 }
 
 Describe 'a valid parameter input file' {
     BeforeAll {
-        . $testScript @Params
+        . $testScript @testParams
     }
     It 'should retrieve the parameters from the .json parameter file' {
         $userParameters | Should -Not -BeNullOrEmpty
@@ -133,19 +122,19 @@ Describe 'a valid parameter input file' {
         $userParameters.ScriptName | Should -Not -BeNullOrEmpty
     }
     It 'should invoke Start-Job with the parameters in the correct order' {
-        Should -invoke Start-Job -Exactly 1 -Scope Describe -ParameterFilter {
+        Should -Invoke Start-Job -Exactly 1 -Scope Describe -ParameterFilter {
             ($Name -eq 'Get printers') -and
-            ($LiteralPath -eq $testScriptPath) -and
+            ($LiteralPath -eq $testParams.ScriptPath) -and
             ($ArgumentList[0] -eq 'MyCustomPrinter') -and
             ($ArgumentList[1] -eq 'red') -and
             ($ArgumentList[2] -eq 'Get printers') -and
-            ($ArgumentList[3] -eq '') -and
+            ($ArgumentList[3] -eq $null) -and
             ($ArgumentList[4] -eq 'A4') # default parameter in the script is copied
         }
-    }
+    } -Tag test
     Context 'logging' {
         BeforeAll {
-            $testLogFolder = "$($Params.LogFolder)\Start script"
+            $testLogFolder = "$($testParams.LogFolder)\Start script"
             $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
         }
         It 'the log folder is created' {            
@@ -172,7 +161,7 @@ Describe 'when Start-Job fails' {
                     # parameters name is missing
                 } -ArgumentList 1
             }
-            . $testScript @Params -EA SilentlyContinue
+            . $testScript @testParams -EA SilentlyContinue
         }
         It 'Start-Job is called' {
             Should -Invoke Start-Job -Scope Context
@@ -187,7 +176,7 @@ Describe 'when Start-Job fails' {
         }
         Context 'logging' {
             BeforeAll {
-                $testLogFolder = "$($Params.LogFolder)\Start script"
+                $testLogFolder = "$($testParams.LogFolder)\Start script"
                 $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
             }
             It 'the log folder is created' {            
@@ -217,7 +206,7 @@ Describe 'when Start-Job fails' {
                     # parameters not matching
                 } -ArgumentList 'string'
             }
-            . $testScript @Params
+            . $testScript @testParams
         }
         It 'Start-Job is called' {
             Should -Invoke Start-Job -Scope Context
@@ -232,7 +221,7 @@ Describe 'when Start-Job fails' {
         }
         Context 'logging' {
             BeforeAll {
-                $testLogFolder = "$($Params.LogFolder)\Start script"
+                $testLogFolder = "$($testParams.LogFolder)\Start script"
                 $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
             }
             It 'the log folder is created' {            
@@ -258,7 +247,7 @@ Describe 'when Start-Job fails' {
                     throw 'Failure in script'
                 }
             }
-            . $testScript @Params
+            . $testScript @testParams
         }
         It 'Start-Job is called' {
             Should -Invoke Start-Job -Scope Context
@@ -273,7 +262,7 @@ Describe 'when Start-Job fails' {
         }
         Context 'logging' {
             BeforeAll {
-                $testLogFolder = "$($Params.LogFolder)\Start script"
+                $testLogFolder = "$($testParams.LogFolder)\Start script"
                 $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
             }
             It 'the log folder is created' {            
@@ -305,7 +294,7 @@ Describe 'when the parameter file is not valid because' {
                 PrinterName  = "MyCustomPrinter"
             } | ConvertTo-Json | Out-File $testInputFile -Encoding utf8
 
-            $clonedParams = $Params.Clone()
+            $clonedParams = $testParams.Clone()
             $clonedParams.ParameterPath = $testInputFile
 
             . $testScript @clonedParams
@@ -321,7 +310,7 @@ Describe 'when the parameter file is not valid because' {
         }
         Context 'logging' {
             BeforeAll {
-                $testLogFolder = "$($Params.LogFolder)\Start script"
+                $testLogFolder = "$($testParams.LogFolder)\Start script"
                 $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
             }
             It 'the log folder is created' {            
@@ -346,7 +335,7 @@ Describe 'when the parameter file is not valid because' {
      
             "NotJsonFormat ;!= " | Out-File $testInputFile -Encoding utf8
 
-            $clonedParams = $Params.Clone()
+            $clonedParams = $testParams.Clone()
             $clonedParams.ParameterPath = $testInputFile
 
             . $testScript @clonedParams
@@ -362,7 +351,7 @@ Describe 'when the parameter file is not valid because' {
         }
         Context 'logging' {
             BeforeAll {
-                $testLogFolder = "$($Params.LogFolder)\Start script"
+                $testLogFolder = "$($testParams.LogFolder)\Start script"
                 $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
             }
             It 'the log folder is created' {            
@@ -389,7 +378,7 @@ Describe 'when the parameter file is not valid because' {
                 UnknownParameter = 'kiwi'
             } | ConvertTo-Json | Out-File $testInputFile -Encoding utf8
 
-            $clonedParams = $Params.Clone()
+            $clonedParams = $testParams.Clone()
             $clonedParams.ParameterPath = $testInputFile
 
             . $testScript @clonedParams
@@ -407,7 +396,7 @@ Describe 'when the parameter file is not valid because' {
         }
         Context 'logging' {
             BeforeAll {
-                $testLogFolder = "$($Params.LogFolder)\Start script"
+                $testLogFolder = "$($testParams.LogFolder)\Start script"
                 $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
             }
             It 'the log folder is created' {            

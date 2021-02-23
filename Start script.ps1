@@ -177,7 +177,7 @@ Process {
         Write-EventLog @EventOutParams -Message (
             "Launch script:`n" +
             "`n- Name:`t`t" + $userParameters.ScriptName + 
-            "`n- Script:`t`t" + $scriptPathItem.FullName + 
+            "`n- Script:`t" + $scriptPathItem.FullName + 
             "`n- ArgumentList:`t" + $startJobArgumentList)
         $StartJobParams = @{
             Name                 = $userParameters.ScriptName
