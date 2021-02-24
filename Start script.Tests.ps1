@@ -128,8 +128,8 @@ Describe 'a valid parameter input file' {
             ($ArgumentList[0] -eq 'MyCustomPrinter') -and
             ($ArgumentList[1] -eq 'red') -and
             ($ArgumentList[2] -eq 'Get printers') -and
-            ($ArgumentList[3] -eq $null) -and
-            ($ArgumentList[4] -eq 'A4') # default parameter in the script is copied
+            ($ArgumentList[3] -eq '') -and
+            ($ArgumentList[4] -eq 'A4') # default parameter in the script
         }
     } -Tag test
     Context 'logging' {

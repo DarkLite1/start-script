@@ -39,7 +39,7 @@ Param (
     [Parameter(Mandatory)]
     [String]$ParameterPath,
     [String]$ScriptName = 'Start script (All)', 
-    [String]$LogFolder = "\\$env:COMPUTERNAME\Log",
+    [String]$LogFolder = $env:POWERSHELL_LOG_FOLDER,
     [String]$ScriptAdmin = $env:POWERSHELL_SCRIPT_ADMIN
 )
 
@@ -156,7 +156,7 @@ Process {
         $startJobArgumentList = @()
         
         foreach ($p in $scriptParametersList) {
-            $value = $null
+            $value = ''
             if ($defaultValues[$p]) {
                 $value = $defaultValues[$p]
             }
