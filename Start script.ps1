@@ -98,8 +98,6 @@ Begin {
             'Name: {0} Type: {1} Mandatory: {2} ' -f 
             $p.Value.Name, $p.Value.ParameterType, $p.Value.Attributes.Mandatory
         }
-
-        $scriptParametersList = $($scriptParameters.Key)
         #endregion
 
         #region Load modules for child script
@@ -139,7 +137,7 @@ Process {
     
         #region Test only valid script parameters are used
         $userParameters.PSObject.Properties.Name | Where-Object {
-            $scriptParametersList -notContains $_
+            $scriptParameters.Key -notContains $_
         } | ForEach-Object {
             $invalidParameter = $_
             throw "The parameter '$invalidParameter' is not accepted by script '$($scriptPathItem.FullName)'."
@@ -151,22 +149,35 @@ Process {
             throw "Parameter 'ScriptName' is mandatory"
         }
         #endregion
-    
+       
         #region Build argument list for Invoke-Command
         $startJobArgumentList = @()
         
-        foreach ($p in $scriptParametersList) {
+        foreach ($p in $scriptParameters.GetEnumerator()) {
             $value = ''
-            if ($defaultValues[$p]) {
-                $value = $defaultValues[$p]
+            if ($defaultValues[$p.Key]) {
+                $value = $defaultValues[$p.Key]
             }
-            if ($userParameters.$p) {
-                $value = $userParameters.$p
+            if ($userParameters.($p.Key)) {
+                $value = $userParameters.($p.Key)
             }
             $value = foreach ($v in $value) {
-                $ExecutionContext.InvokeCommand.ExpandString($v)
+                if ($v -is [String]) {
+                    # convert '$env:' variables to strings
+                    $ExecutionContext.InvokeCommand.ExpandString($v)
+                }
+                elseif ($p.Value.ParameterType.Name -eq 'HashTable') {
+                    # convert 'PSCustomObject' to hash table 
+                    # when the script accepts type HashTable
+                    $hashTable = @{}
+                    $v.PSObject.properties | ForEach-Object { 
+                        $hashTable[$_.Name] = $_.Value 
+                    }    
+                    $hashTable
+                }
+                else { $v }
             }
-            Write-Verbose "Parameter name '$p' value '$value'"
+            Write-Verbose "Parameter name '$($p.Key)' value '$value'"
             $startJobArgumentList += , $value
         }
         #endregion
@@ -207,7 +218,7 @@ Process {
         
         #region Return job results or fail on error
         Write-Verbose "Job '$($job.Name)' status '$($job.State)'"
-        $jobResult  = $job | Receive-Job -EA Stop
+        $jobResult = $job | Receive-Job -EA Stop
 
         if ($jobResult) {
             $jobResult

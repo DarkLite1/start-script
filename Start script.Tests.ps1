@@ -41,7 +41,6 @@ BeforeAll {
     Mock Send-MailHC
     Mock Write-EventLog
 }
-
 Describe 'error handling' {    
     Context 'mandatory parameters' {
         It '<_>' -TestCases @('ScriptPath' , 'ParameterPath' ) {
@@ -110,7 +109,6 @@ Describe 'error handling' {
         }
     }
 }
-
 Describe 'a valid parameter input file' {
     BeforeAll {
         . $testScript @testParams
@@ -131,7 +129,7 @@ Describe 'a valid parameter input file' {
             ($ArgumentList[3] -eq '') -and
             ($ArgumentList[4] -eq 'A4') # default parameter in the script
         }
-    } -Tag test
+    }
     Context 'logging' {
         BeforeAll {
             $testLogFolder = "$($testParams.LogFolder)\Start script"
@@ -146,7 +144,6 @@ Describe 'a valid parameter input file' {
         }
     }
 }
-
 Describe 'when Start-Job fails' {
     Context 'because of a missing mandatory parameter' {
         BeforeAll {
@@ -282,7 +279,6 @@ Describe 'when Start-Job fails' {
         }
     }
 }
-
 Describe 'when the parameter file is not valid because' {
     Context 'it is missing the property ScriptName' {
         BeforeAll {
@@ -416,3 +412,122 @@ Describe 'when the parameter file is not valid because' {
         }
     }
 }
+Describe 'invoke Start-Job is called with argument type' {
+    BeforeAll {
+        @"
+        Param (
+            [Parameter(Mandatory)]
+            [String]`$ScriptName, 
+            [Parameter(Mandatory)]
+            [String[]]`$Colors,  
+            [Parameter(Mandatory)]
+            [PSCustomObject]`$CustomObject,
+            [Parameter(Mandatory)]
+            [HashTable]`$CustomHashTable,
+            [String]`$LogFolder = "`$testLogFolder",
+            [String]`$customLogFolder = "`$testLogFolder\`$ScriptName"
+        )
+"@ | Out-File $testParams.ScriptPath -Encoding utf8 -Force
+    
+        @{
+            ScriptName      = 'Get printers'
+            Colors          = @('red', 'green', 'blue')
+            CustomObject    = @{
+                Duplex = 'Yes'
+            }
+            CustomHashTable = @{
+                DoubleSided = 'No'
+            }
+        } | ConvertTo-Json | 
+        Out-File $testParams.ParameterPath -Encoding utf8  -Force
+     
+        . $testScript @testParams
+    }
+    It 'string' {
+        Should -Invoke Start-Job -Exactly 1 -Scope Describe -ParameterFilter {
+            ($LiteralPath -eq $testParams.ScriptPath) -and
+            ($ArgumentList[0] -eq 'Get printers') -and
+            ($ArgumentList[0] -is [String])
+        }
+    }
+    It 'array' {
+        Should -Invoke Start-Job -Exactly 1 -Scope Describe -ParameterFilter {
+            ($LiteralPath -eq $testParams.ScriptPath) -and
+            ($ArgumentList[1][0] -eq 'red') -and
+            ($ArgumentList[1][1] -eq 'green') -and
+            ($ArgumentList[1][2] -eq 'blue') -and
+            ($ArgumentList[1] -is [System.Array])
+        }
+    }
+    It 'PSCustomObject' {
+        Should -Invoke Start-Job -Exactly 1 -Scope Describe -ParameterFilter {
+            ($LiteralPath -eq $testParams.ScriptPath) -and
+            ($ArgumentList[2].Duplex -eq 'Yes') -and
+            ($ArgumentList[2] -is [PSCustomObject])
+        }
+    }
+    It 'HashTable when the script parameter is of type HashTable' {
+        Should -Invoke Start-Job -Exactly 1 -Scope Describe -ParameterFilter {
+            ($LiteralPath -eq $testParams.ScriptPath) -and
+            ($ArgumentList[3].DoubleSided -eq 'No') -and
+            ($ArgumentList[3] -is [HashTable])
+        }
+    } 
+}
+Describe 'invoke Start-Job is called with default values and argument type' {
+    BeforeAll {
+        @"
+        Param (
+            [Parameter(Mandatory)]
+            [String]`$ScriptName, 
+            [String[]]`$Colors = @('red', 'green'),  
+            [PSCustomObject]`$CustomObject = [PSCustomObject]@{
+                Duplex = 'Yes'
+            },
+            [HashTable]`$CustomHashTable = @{
+                DoubleSided = 'N'
+            }
+        )
+"@ | Out-File $testParams.ScriptPath -Encoding utf8 -Force
+    
+        @{
+            ScriptName = 'Get printers'
+        } | ConvertTo-Json | 
+        Out-File $testParams.ParameterPath -Encoding utf8  -Force
+     
+        . $testScript @testParams
+    }
+    It 'string' {
+        Should -Invoke Start-Job -Exactly 1 -Scope Describe -ParameterFilter {
+            ($LiteralPath -eq $testParams.ScriptPath) -and
+            ($ArgumentList[0] -eq 'Get printers') -and
+            ($ArgumentList[0] -is [String])
+        }
+    }
+    It 'array' {
+        Should -Invoke Start-Job -Exactly 1 -Scope Describe -ParameterFilter {
+            ($LiteralPath -eq $testParams.ScriptPath) -and
+            ($ArgumentList[1][0] -eq 'red') -and
+            ($ArgumentList[1][1] -eq 'green') -and
+            ($ArgumentList[1] -is [System.Array])
+        }
+    }
+    It 'PSCustomObject' {
+        Should -Invoke Start-Job -Exactly 1 -Scope Describe -ParameterFilter {
+            ($LiteralPath -eq $testParams.ScriptPath) -and
+            ($ArgumentList[2].Duplex -eq 'Yes') -and
+            ($ArgumentList[2] -is [PSCustomObject])
+        }
+    }
+    It 'HashTable when the script parameter is of type HashTable' {
+        Should -Invoke Start-Job -Exactly 1 -Scope Describe -ParameterFilter {
+            ($LiteralPath -eq $testParams.ScriptPath) -and
+            ($ArgumentList[3].DoubleSided -eq 'No') -and
+            ($ArgumentList[3] -is [HashTable])
+        }
+    } 
+}
+
+<# 
+
+Invoke-Pester 'T:\Prod\Start script\Start script.Tests.ps1' -Output Detailed -TagFilter test #>
