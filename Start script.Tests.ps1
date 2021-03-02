@@ -1,4 +1,4 @@
-﻿#Requires -Module Assert, Pester
+﻿#Requires -Module Pester
 
 BeforeAll {
     $StartJobCommand = Get-Command Start-Job
