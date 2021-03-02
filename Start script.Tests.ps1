@@ -237,7 +237,7 @@ Describe 'when Start-Job fails' {
             }
         }
     }
-    Context 'because of errors in the execution script' {
+    Context 'because of terminating errors in the execution script' {
         BeforeAll {
             Mock Start-Job {
                 & $StartJobCommand -Scriptblock { 

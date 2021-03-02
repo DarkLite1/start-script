@@ -221,13 +221,12 @@ Process {
         
         #region Return job results or fail on error
         Write-Verbose "Job '$($job.Name)' status '$($job.State)'"
-        $jobResult = $job | Receive-Job -EA Stop
 
-        if ($jobResult) {
-            $jobResult
+        if ($job.State -eq 'Failed') {
+            throw $job.ChildJobs[0].JobStateInfo.Reason.Message
         }
         else {
-            Write-Verbose 'No job output'
+            $job | Receive-Job
         }
         #endregion
         
