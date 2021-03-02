@@ -150,7 +150,7 @@ Process {
         }
         #endregion
        
-        #region Build argument list for Invoke-Command
+        #region Build argument list for Start-Job
         $startJobArgumentList = @()
         
         foreach ($p in $scriptParameters.GetEnumerator()) {
@@ -166,13 +166,16 @@ Process {
                     # convert '$env:' variables to strings
                     $ExecutionContext.InvokeCommand.ExpandString($v)
                 }
-                elseif ($p.Value.ParameterType.Name -eq 'HashTable') {
-                    # convert 'PSCustomObject' to hash table 
+                elseif (
+                    ($v -is [PSCustomObject]) -and
+                    ($p.Value.ParameterType.Name -eq 'HashTable')
+                ) {
                     # when the script accepts type HashTable
+                    # convert 'PSCustomObject' to hash table 
                     $hashTable = @{}
                     $v.PSObject.properties | ForEach-Object { 
                         $hashTable[$_.Name] = $_.Value 
-                    }    
+                    }
                     $hashTable
                 }
                 else { $v }
