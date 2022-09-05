@@ -7,7 +7,7 @@ BeforeAll {
         ScriptPath    = (New-Item -Path "TestDrive:\script.ps1" -Force -ItemType File).FullName
         ParameterPath = (New-Item -Path "TestDrive:\inputFile.json" -Force -ItemType File).FullName
         ScriptName    = 'Test'
-        LogFolder     = New-Item -Path "TestDrive:\Log" -ItemType Directory
+        LogFolder     = "TestDrive:\Log"
     }
     $testScript = $PSCommandPath.Replace('.Tests.ps1', '.ps1')
 
@@ -51,12 +51,12 @@ Describe 'error handling' {
     Context 'the logFolder' {
         It 'should exist' {
             $clonedParams = $testParams.Clone()
-            $clonedParams.LogFolder = 'NotExistingLogFolder'
+            $clonedParams.LogFolder = 'xx:\NotExistingLogFolder'
             . $testScript @clonedParams
     
             Should -Invoke Send-MailHC -Exactly 1 -ParameterFilter {
                 (&$MailAdminParams) -and 
-                ($Message -like "*Path 'NotExistingLogFolder' not found*")
+                ($Message -like "*Failed creating the log folder 'xx:\NotExistingLogFolder'*")
             }
         }
     }
@@ -132,11 +132,10 @@ Describe 'a valid parameter input file' {
     }
     Context 'logging' {
         BeforeAll {
-            $testLogFolder = "$($testParams.LogFolder)\Start script"
-            $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
+            $testLogFile = Get-ChildItem $testParams.logFolder -Recurse -File
         }
         It 'the log folder is created' {            
-            $testLogFolder | Should -Exist
+            $testParams.logFolder | Should -Exist
         }
         It 'the parameter input file is copied to the log folder' {
             $testLogFile.Count | Should -BeExactly 1
@@ -173,11 +172,10 @@ Describe 'when Start-Job fails' {
         }
         Context 'logging' {
             BeforeAll {
-                $testLogFolder = "$($testParams.LogFolder)\Start script"
-                $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
+                $testLogFile = Get-ChildItem $testParams.logFolder -Recurse -File
             }
             It 'the log folder is created' {            
-                $testLogFolder | Should -Exist
+                $testParams.logFolder | Should -Exist
             }
             It 'two files are created in the log folder' {
                 $testLogFile.Count | Should -BeExactly 2
@@ -218,11 +216,10 @@ Describe 'when Start-Job fails' {
         }
         Context 'logging' {
             BeforeAll {
-                $testLogFolder = "$($testParams.LogFolder)\Start script"
-                $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
+                $testLogFile = Get-ChildItem $testParams.logFolder -Recurse -File
             }
             It 'the log folder is created' {            
-                $testLogFolder | Should -Exist
+                $testParams.logFolder | Should -Exist
             }
             It 'two files are created in the log folder' {
                 $testLogFile.Count | Should -BeExactly 2
@@ -259,11 +256,10 @@ Describe 'when Start-Job fails' {
         }
         Context 'logging' {
             BeforeAll {
-                $testLogFolder = "$($testParams.LogFolder)\Start script"
-                $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
+                $testLogFile = Get-ChildItem $testParams.logFolder -Recurse -File
             }
             It 'the log folder is created' {            
-                $testLogFolder | Should -Exist
+                $testParams.logFolder | Should -Exist
             }
             It 'two files are created in the log folder' {
                 $testLogFile.Count | Should -BeExactly 2
@@ -306,11 +302,10 @@ Describe 'when the parameter file is not valid because' {
         }
         Context 'logging' {
             BeforeAll {
-                $testLogFolder = "$($testParams.LogFolder)\Start script"
-                $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
+                $testLogFile = Get-ChildItem $testParams.logFolder -Recurse -File
             }
             It 'the log folder is created' {            
-                $testLogFolder | Should -Exist
+                $testParams.logFolder | Should -Exist
             }
             It 'two files are created in the log folder' {
                 $testLogFile.Count | Should -BeExactly 2
@@ -347,11 +342,10 @@ Describe 'when the parameter file is not valid because' {
         }
         Context 'logging' {
             BeforeAll {
-                $testLogFolder = "$($testParams.LogFolder)\Start script"
-                $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
+                $testLogFile = Get-ChildItem $testParams.logFolder -Recurse -File
             }
             It 'the log folder is created' {            
-                $testLogFolder | Should -Exist
+                $testParams.logFolder | Should -Exist
             }
             It 'two files are created in the log folder' {
                 $testLogFile.Count | Should -BeExactly 1
@@ -392,11 +386,10 @@ Describe 'when the parameter file is not valid because' {
         }
         Context 'logging' {
             BeforeAll {
-                $testLogFolder = "$($testParams.LogFolder)\Start script"
-                $testLogFile = Get-ChildItem $testLogFolder -Recurse -File
+                $testLogFile = Get-ChildItem $testParams.logFolder -Recurse -File
             }
             It 'the log folder is created' {            
-                $testLogFolder | Should -Exist
+                $testParams.logFolder | Should -Exist
             }
             It 'two files are created in the log folder' {
                 $testLogFile.Count | Should -BeExactly 2
