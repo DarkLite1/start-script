@@ -8,13 +8,12 @@ BeforeAll {
         ParameterPath = (New-Item -Path "TestDrive:\inputFile.json" -Force -ItemType File).FullName
         ScriptName    = 'Test'
         LogFolder     = "TestDrive:\Log"
+        ScriptAdmin   = 'admin@constoso.com'
     }
     $testScript = $PSCommandPath.Replace('.Tests.ps1', '.ps1')
 
     $MailAdminParams = {
-        ($To -eq $ScriptAdmin) -and 
-        ($Priority -eq 'High') -and 
-        ($Subject -eq 'FAILURE')
+        ($To -eq $testParams.ScriptAdmin) -and ($Priority -eq 'High') -and ($Subject -eq 'FAILURE')
     }
     
     @"

@@ -40,7 +40,10 @@ Param (
     [String]$ParameterPath,
     [String]$ScriptName = 'Start script (All)', 
     [String]$LogFolder = "$env:POWERSHELL_LOG_FOLDER\Start script",
-    [String[]]$ScriptAdmin = $env:POWERSHELL_SCRIPT_ADMIN
+    [String[]]$ScriptAdmin = @(
+        $env:POWERSHELL_SCRIPT_ADMIN,
+        $env:POWERSHELL_SCRIPT_ADMIN_BACKUP
+    )
 )
  
 Begin {
@@ -201,11 +204,11 @@ Process {
             "`n- Script:`t" + $scriptPathItem.FullName + 
             "`n- ArgumentList:`t" + $startJobArgumentList)
         $StartJobParams = @{
-            Name                 = $userParameters.ScriptName
+            Name         = $userParameters.ScriptName
             # Running startup script threw an error: Unable: Unable to load one or more of the requested types. Retrieve the LoaderExceptions property for more information..
             # InitializationScript = $LoadModules
-            LiteralPath          = $scriptPathItem.FullName
-            ArgumentList         = $startJobArgumentList
+            LiteralPath  = $scriptPathItem.FullName
+            ArgumentList = $startJobArgumentList
         }
         $job = Start-Job @StartJobParams
         #endregion
