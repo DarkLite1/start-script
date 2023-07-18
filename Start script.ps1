@@ -116,8 +116,6 @@ Begin {
         #endregion
     }
     Catch {
-        $error | Export-Clixml 'T:\Prod\Start script\error.xml'
-
         Write-Warning $_
         Send-MailHC -To $ScriptAdmin -Subject FAILURE -Priority High -Message $_ -Header $ScriptName
         Write-EventLog @EventErrorParams -Message "FAILURE:`n`n- $_"
@@ -244,8 +242,6 @@ Process {
         Write-Verbose 'Script finished successfully'
     }
     Catch {
-        $error | Export-Clixml 'T:\Prod\Start script\error.xml'
-
         Write-Warning $_
  
         #region Create error file
