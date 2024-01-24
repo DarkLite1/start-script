@@ -1,4 +1,5 @@
-﻿#Requires -Module Pester
+﻿#Requires -Version 5.1
+#Requires -Modules Pester
 
 BeforeAll {
     $StartJobCommand = Get-Command Start-Job
@@ -15,7 +16,7 @@ BeforeAll {
     $MailAdminParams = {
         ($To -eq $testParams.ScriptAdmin) -and ($Priority -eq 'High') -and ($Subject -eq 'FAILURE')
     }
-    
+
     @"
     Param (
         [Parameter(Mandatory)]
@@ -28,7 +29,7 @@ BeforeAll {
     )
 "@ | Out-File $testParams.ScriptPath -Encoding utf8 -Force
 
-    @{  
+    @{
         PrinterColor = 'red'
         PrinterName  = "MyCustomPrinter"
         ScriptName   = 'Get printers'
@@ -40,7 +41,7 @@ BeforeAll {
     Mock Send-MailHC
     Mock Write-EventLog
 }
-Describe 'error handling' {    
+Describe 'error handling' {
     Context 'mandatory parameters' {
         It '<_>' -TestCases @('ScriptPath' , 'ParameterPath' ) {
             (Get-Command $testScript).Parameters[$_].Attributes.Mandatory |
@@ -52,9 +53,9 @@ Describe 'error handling' {
             $clonedParams = $testParams.Clone()
             $clonedParams.LogFolder = 'xx:\NotExistingLogFolder'
             . $testScript @clonedParams
-    
+
             Should -Invoke Send-MailHC -Exactly 1 -ParameterFilter {
-                (&$MailAdminParams) -and 
+                (&$MailAdminParams) -and
                 ($Message -like "*Failed creating the log folder 'xx:\NotExistingLogFolder'*")
             }
         }
@@ -63,22 +64,22 @@ Describe 'error handling' {
         It 'should exist' {
             $clonedParams = $testParams.Clone()
             $clonedParams.ScriptPath = 'NotExisting'
-            
+
             . $testScript @clonedParams
-    
+
             Should -Invoke Send-MailHC -Exactly 1 -ParameterFilter {
-                (&$MailAdminParams) -and 
+                (&$MailAdminParams) -and
                 ($Message -like "*Script file 'NotExisting' not found*")
             }
         }
         It 'should have the extension .ps1' {
             $clonedParams = $testParams.Clone()
             $clonedParams.ScriptPath = (New-Item -Path "TestDrive:\incorrectScript.txt" -Force -ItemType File -EA Ignore).FullName
-            
+
             . $testScript @clonedParams
-    
+
             Should -Invoke Send-MailHC -Exactly 1 -ParameterFilter {
-                (&$MailAdminParams) -and 
+                (&$MailAdminParams) -and
                 ($Message -like "*Script file '*incorrectScript.txt' needs to have the extension '.ps1'*")
             }
         }
@@ -87,22 +88,22 @@ Describe 'error handling' {
         It 'should exist' {
             $clonedParams = $testParams.Clone()
             $clonedParams.ParameterPath = 'NotExisting'
-            
+
             . $testScript @clonedParams
-    
+
             Should -Invoke Send-MailHC -Exactly 1 -ParameterFilter {
-                (&$MailAdminParams) -and 
+                (&$MailAdminParams) -and
                 ($Message -like "*Parameter file 'NotExisting' not found*")
             }
         }
         It 'should have the extension .json' {
             $clonedParams = $testParams.Clone()
             $clonedParams.ParameterPath = (New-Item -Path "TestDrive:\incorrectParameter.txt" -Force -ItemType File -EA Ignore).FullName
-            
+
             . $testScript @clonedParams
-    
+
             Should -Invoke Send-MailHC -Exactly 1 -ParameterFilter {
-                (&$MailAdminParams) -and 
+                (&$MailAdminParams) -and
                 ($Message -like "*Parameter file '*incorrectParameter.txt' needs to have the extension '.json'*")
             }
         }
@@ -133,7 +134,7 @@ Describe 'a valid parameter input file' {
         BeforeAll {
             $testLogFile = Get-ChildItem $testParams.logFolder -Recurse -File
         }
-        It 'the log folder is created' {            
+        It 'the log folder is created' {
             $testParams.logFolder | Should -Exist
         }
         It 'the parameter input file is copied to the log folder' {
@@ -146,7 +147,7 @@ Describe 'when Start-Job fails' {
     Context 'because of a missing mandatory parameter' {
         BeforeAll {
             Mock Start-Job {
-                & $StartJobCommand -Scriptblock { 
+                & $StartJobCommand -Scriptblock {
                     Param (
                         [parameter(Mandatory)]
                         [int]$Number,
@@ -163,8 +164,8 @@ Describe 'when Start-Job fails' {
         }
         It 'an email is sent to the admin' {
             Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {
-                ($To -eq $ScriptAdmin) -and 
-                ($Priority -eq 'High') -and 
+                ($To -eq $ScriptAdmin) -and
+                ($Priority -eq 'High') -and
                 ($Subject -eq 'FAILURE - Get printers') -and
                 ($Message -like "*Job status 'Blocked', have you provided all mandatory parameters?*")
             }
@@ -173,7 +174,7 @@ Describe 'when Start-Job fails' {
             BeforeAll {
                 $testLogFile = Get-ChildItem $testParams.logFolder -Recurse -File
             }
-            It 'the log folder is created' {            
+            It 'the log folder is created' {
                 $testParams.logFolder | Should -Exist
             }
             It 'two files are created in the log folder' {
@@ -192,7 +193,7 @@ Describe 'when Start-Job fails' {
     Context 'because of parameter validation issues' {
         BeforeAll {
             Mock Start-Job {
-                & $StartJobCommand -Scriptblock { 
+                & $StartJobCommand -Scriptblock {
                     Param (
                         [parameter(Mandatory)]
                         [int]$IncorrectParameters
@@ -207,8 +208,8 @@ Describe 'when Start-Job fails' {
         }
         It 'an email is sent to the admin' {
             Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {
-                ($To -eq $ScriptAdmin) -and 
-                ($Priority -eq 'High') -and 
+                ($To -eq $ScriptAdmin) -and
+                ($Priority -eq 'High') -and
                 ($Subject -eq 'FAILURE - Get printers') -and
                 ($Message -like "*Cannot process argument transformation on parameter 'IncorrectParameters'*")
             }
@@ -217,7 +218,7 @@ Describe 'when Start-Job fails' {
             BeforeAll {
                 $testLogFile = Get-ChildItem $testParams.logFolder -Recurse -File
             }
-            It 'the log folder is created' {            
+            It 'the log folder is created' {
                 $testParams.logFolder | Should -Exist
             }
             It 'two files are created in the log folder' {
@@ -236,7 +237,7 @@ Describe 'when Start-Job fails' {
     Context 'because of terminating errors in the execution script' {
         BeforeAll {
             Mock Start-Job {
-                & $StartJobCommand -Scriptblock { 
+                & $StartJobCommand -Scriptblock {
                     throw 'Failure in script'
                 }
             }
@@ -247,8 +248,8 @@ Describe 'when Start-Job fails' {
         }
         It 'an email is sent to the admin' {
             Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {
-                ($To -eq $ScriptAdmin) -and 
-                ($Priority -eq 'High') -and 
+                ($To -eq $ScriptAdmin) -and
+                ($Priority -eq 'High') -and
                 ($Subject -eq 'FAILURE - Get printers') -and
                 ($Message -like "*Failure in script*")
             }
@@ -257,7 +258,7 @@ Describe 'when Start-Job fails' {
             BeforeAll {
                 $testLogFile = Get-ChildItem $testParams.logFolder -Recurse -File
             }
-            It 'the log folder is created' {            
+            It 'the log folder is created' {
                 $testParams.logFolder | Should -Exist
             }
             It 'two files are created in the log folder' {
@@ -278,7 +279,7 @@ Describe 'when the parameter file is not valid because' {
     Context 'it is missing the property ScriptName' {
         BeforeAll {
             $testInputFile = (New-Item -Path "TestDrive:\InputFile.json" -Force -ItemType File -EA Ignore).FullName
-     
+
             @{
                 ScriptName   = $null
                 PrinterColor = 'red'
@@ -295,7 +296,7 @@ Describe 'when the parameter file is not valid because' {
         }
         It 'an email is sent to the admin' {
             Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {
-                (&$MailAdminParams) -and 
+                (&$MailAdminParams) -and
                 ($Message -like "*Parameter 'ScriptName' is mandatory*")
             }
         }
@@ -303,7 +304,7 @@ Describe 'when the parameter file is not valid because' {
             BeforeAll {
                 $testLogFile = Get-ChildItem $testParams.logFolder -Recurse -File
             }
-            It 'the log folder is created' {            
+            It 'the log folder is created' {
                 $testParams.logFolder | Should -Exist
             }
             It 'two files are created in the log folder' {
@@ -322,7 +323,7 @@ Describe 'when the parameter file is not valid because' {
     Context 'it is not a valid .json file' {
         BeforeAll {
             $testInputFile = (New-Item -Path "TestDrive:\InputFile.json" -Force -ItemType File -EA Ignore).FullName
-     
+
             "NotJsonFormat ;!= " | Out-File $testInputFile -Encoding utf8
 
             $clonedParams = $testParams.Clone()
@@ -335,7 +336,7 @@ Describe 'when the parameter file is not valid because' {
         }
         It 'an email is sent to the admin' {
             Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {
-                (&$MailAdminParams) -and 
+                (&$MailAdminParams) -and
                 ($Message -like "*Invalid parameter file*")
             }
         }
@@ -343,7 +344,7 @@ Describe 'when the parameter file is not valid because' {
             BeforeAll {
                 $testLogFile = Get-ChildItem $testParams.logFolder -Recurse -File
             }
-            It 'the log folder is created' {            
+            It 'the log folder is created' {
                 $testParams.logFolder | Should -Exist
             }
             It 'two files are created in the log folder' {
@@ -359,7 +360,7 @@ Describe 'when the parameter file is not valid because' {
     Context 'the user used a parameter that is not available in the script' {
         BeforeAll {
             $testInputFile = (New-Item -Path "TestDrive:\InputFile.json" -Force -ItemType File -EA Ignore).FullName
-     
+
             @{
                 PrinterColor     = 'red'
                 PrinterName      = "MyCustomPrinter"
@@ -377,8 +378,8 @@ Describe 'when the parameter file is not valid because' {
         }
         It 'an email is sent to the admin' {
             Should -Invoke Send-MailHC -Exactly 1 -Scope Context -ParameterFilter {
-                ($To -eq $ScriptAdmin) -and 
-                ($Priority -eq 'High') -and 
+                ($To -eq $ScriptAdmin) -and
+                ($Priority -eq 'High') -and
                 ($Subject -eq 'FAILURE - Get printers') -and
                 ($Message -like "*parameter 'UnknownParameter' is not accepted by script*")
             }
@@ -387,7 +388,7 @@ Describe 'when the parameter file is not valid because' {
             BeforeAll {
                 $testLogFile = Get-ChildItem $testParams.logFolder -Recurse -File
             }
-            It 'the log folder is created' {            
+            It 'the log folder is created' {
                 $testParams.logFolder | Should -Exist
             }
             It 'two files are created in the log folder' {
@@ -410,9 +411,9 @@ Describe 'invoke Start-Job is called with the correct argument type when' {
             @"
         Param (
             [Parameter(Mandatory)]
-            [String]`$ScriptName, 
+            [String]`$ScriptName,
             [Parameter(Mandatory)]
-            [String[]]`$Colors,  
+            [String[]]`$Colors,
             [Parameter(Mandatory)]
             [PSCustomObject]`$CustomObject,
             [Parameter(Mandatory)]
@@ -421,7 +422,7 @@ Describe 'invoke Start-Job is called with the correct argument type when' {
             [String]`$customLogFolder = "`$testLogFolder\`$ScriptName"
         )
 "@ | Out-File $testParams.ScriptPath -Encoding utf8 -Force
-    
+
             @{
                 ScriptName      = 'Get printers'
                 Colors          = @('red', 'green', 'blue')
@@ -431,9 +432,9 @@ Describe 'invoke Start-Job is called with the correct argument type when' {
                 CustomHashTable = @{
                     DoubleSided = 'No'
                 }
-            } | ConvertTo-Json | 
+            } | ConvertTo-Json |
             Out-File $testParams.ParameterPath -Encoding utf8  -Force
-     
+
             . $testScript @testParams
         }
         It 'string' {
@@ -472,8 +473,8 @@ Describe 'invoke Start-Job is called with the correct argument type when' {
             @"
             Param (
                 [Parameter(Mandatory)]
-                [String]`$ScriptName, 
-                [String[]]`$Colors = @('red', 'green'),  
+                [String]`$ScriptName,
+                [String[]]`$Colors = @('red', 'green'),
                 [PSCustomObject]`$CustomObject = [PSCustomObject]@{
                     Duplex = 'Yes'
                 },
@@ -482,12 +483,12 @@ Describe 'invoke Start-Job is called with the correct argument type when' {
                 }
             )
 "@ | Out-File $testParams.ScriptPath -Encoding utf8 -Force
-        
+
             @{
                 ScriptName = 'Get printers'
-            } | ConvertTo-Json | 
+            } | ConvertTo-Json |
             Out-File $testParams.ParameterPath -Encoding utf8  -Force
-         
+
             . $testScript @testParams
         }
         It 'string' {
